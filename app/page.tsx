@@ -41,8 +41,8 @@ export default function Home() {
     }));
 
     setFiles((currentFiles) => {
-      const seen = new Set(currentFiles.map((file) => file.id));
-      const uniqueNewFiles = nextFiles.filter((file) => !seen.has(file.id));
+      const seen = new Set(currentFiles.map((f) => f.id));
+      const uniqueNewFiles = nextFiles.filter((f) => !seen.has(f.id));
       return [...currentFiles, ...uniqueNewFiles];
     });
   };
@@ -51,13 +51,12 @@ export default function Home() {
     if (files.length === 0 || isGenerating) return;
 
     setIsGenerating(true);
-    setGeneratedScript([]);
     setErrorMessage(null);
 
     try {
       const formData = new FormData();
-      files.forEach((file) => {
-        formData.append('files', file.file);
+      files.forEach((f) => {
+        formData.append('files', f.file);
       });
 
       const response = await fetch('/api/generate-podcast', {
@@ -65,11 +64,12 @@ export default function Home() {
         body: formData,
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('No se pudo generar el podcast.');
+        throw new Error(data.error || 'No se pudo generar el podcast.');
       }
 
-      const data = (await response.json()) as PodcastLine[];
       setGeneratedScript(data);
     } catch (error) {
       setErrorMessage(
@@ -81,103 +81,156 @@ export default function Home() {
   };
 
   const totalSize = useMemo(
-    () => files.reduce((acc, file) => acc + file.size, 0),
+    () => files.reduce((acc, f) => acc + f.size, 0),
     [files],
   );
 
+  const removeFile = (id: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-10 text-slate-900">
-      <section className="mx-auto w-full max-w-3xl rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-        <h1 className="mb-2 text-3xl font-bold">Subir archivos</h1>
-        <p className="mb-6 text-sm text-slate-600">
-          Arrastra y suelta archivos o selecciónalos desde tu dispositivo.
-        </p>
-
-        <label
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setIsDragging(false);
-            addFiles(event.dataTransfer.files);
-          }}
-          className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition ${
-            isDragging
-              ? 'border-indigo-500 bg-indigo-50'
-              : 'border-slate-300 bg-slate-50 hover:border-indigo-400 hover:bg-indigo-50/60'
-          }`}
-        >
-          <span className="text-base font-medium">
-            {isDragging
-              ? 'Suelta los archivos aquí'
-              : 'Arrastra y suelta archivos aquí'}
-          </span>
-          <span className="mt-2 text-sm text-slate-500">o haz clic para seleccionarlos</span>
-          <input
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              if (event.target.files) {
-                addFiles(event.target.files);
-                event.target.value = '';
-              }
-            }}
-          />
-        </label>
-
-        <div className="mt-8">
-          <h2 className="text-lg font-semibold">Archivos cargados ({files.length})</h2>
-          <ul className="mt-3 space-y-2">
-            {files.length === 0 ? (
-              <li className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                Todavía no has subido archivos.
-              </li>
-            ) : (
-              files.map((file) => (
-                <li
-                  key={file.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3"
-                >
-                  <span className="truncate pr-4 text-sm font-medium">{file.name}</span>
-                  <span className="text-sm text-slate-500">{formatBytes(file.size)}</span>
-                </li>
-              ))
-            )}
-          </ul>
-          <p className="mt-3 text-sm text-slate-600">Tamaño total: {formatBytes(totalSize)}</p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGenerate}
-          disabled={isGenerating || files.length === 0}
-          className="mt-8 w-full rounded-xl bg-indigo-600 px-4 py-3 text-base font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
-        >
-          {isGenerating ? 'Generando...' : 'Generar Podcast'}
-        </button>
-
-        {errorMessage ? (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {errorMessage}
+    <main className="min-h-screen bg-slate-50 px-4 py-12 text-slate-900">
+      <section className="mx-auto w-full max-w-3xl space-y-8">
+        {/* Cabecera y Subida */}
+        <div className="rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <h1 className="text-3xl font-bold tracking-tight">Podcast Creator</h1>
+          <p className="mt-2 text-slate-600">
+            Sube tus documentos para transformarlos en un guion de podcast generado por IA.
           </p>
-        ) : null}
 
-        {generatedScript.length > 0 ? (
-          <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="text-base font-semibold">Guion generado</h3>
-            <ul className="mt-3 space-y-3">
-              {generatedScript.map((line, index) => (
-                <li key={`${line.speaker}-${index}`} className="text-sm">
-                  <span className="font-semibold">{line.speaker}:</span> {line.text}
+          <label
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              addFiles(e.dataTransfer.files);
+            }}
+            className={`mt-8 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition-all ${isDragging
+                ? 'border-indigo-500 bg-indigo-50/50 scale-[1.01]'
+                : 'border-slate-200 bg-slate-50/50 hover:border-indigo-300 hover:bg-indigo-50/30'
+              }`}
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-200">
+              <span className="text-xl">📄</span>
+            </div>
+            <span className="mt-4 text-sm font-semibold">
+              {isDragging ? 'Suelta ahora' : 'Arrastra archivos PDF o texto'}
+            </span>
+            <span className="mt-1 text-xs text-slate-400">Máximo 10MB por archivo</span>
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) {
+                  addFiles(e.target.files);
+                  e.target.value = '';
+                }
+              }}
+            />
+          </label>
+
+          {/* Lista de Archivos */}
+          <div className="mt-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">
+                Archivos ({files.length})
+              </h2>
+              {files.length > 0 && (
+                <span className="text-xs text-slate-400">Total: {formatBytes(totalSize)}</span>
+              )}
+            </div>
+            <ul className="mt-4 space-y-2">
+              {files.length === 0 ? (
+                <li className="rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3 text-sm text-slate-400 italic">
+                  No hay archivos seleccionados.
                 </li>
-              ))}
+              ) : (
+                files.map((file) => (
+                  <li
+                    key={file.id}
+                    className="group flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-slate-300"
+                  >
+                    <div className="flex flex-col truncate">
+                      <span className="truncate text-sm font-medium">{file.name}</span>
+                      <span className="text-[10px] text-slate-400">{formatBytes(file.size)}</span>
+                    </div>
+                    <button
+                      onClick={() => removeFile(file.id)}
+                      className="ml-4 text-slate-300 hover:text-red-500 transition-colors"
+                      title="Eliminar archivo"
+                    >
+                      <span className="text-lg">×</span>
+                    </button>
+                  </li>
+                ))
+              )}
             </ul>
           </div>
-        ) : null}
+
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={isGenerating || files.length === 0}
+            className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-4 text-base font-bold text-white shadow-md transition-all hover:bg-indigo-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
+          >
+            {isGenerating ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Analizando y redactando...
+              </>
+            ) : (
+              'Generar Guion de Podcast'
+            )}
+          </button>
+
+          {errorMessage && (
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <span>⚠️</span> {errorMessage}
+            </div>
+          )}
+        </div>
+
+        {/* Sección de Guion Generado */}
+        {generatedScript.length > 0 && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <h3 className="text-xl font-bold text-slate-800">🎙️ Guion Generado</h3>
+              <button
+                onClick={() => window.print()}
+                className="text-xs font-semibold text-indigo-600 hover:underline"
+              >
+                Imprimir guion
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {generatedScript.map((line, index) => {
+                const isHost = line.speaker.toLowerCase().includes('host') ||
+                  line.speaker.toLowerCase().includes('presentador');
+
+                return (
+                  <div
+                    key={index}
+                    className={`flex flex-col gap-1.5 ${isHost ? 'items-start' : 'items-end'}`}
+                  >
+                    <span className="px-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      {line.speaker}
+                    </span>
+                    <div className={`max-w-[90%] rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed shadow-sm ring-1 ${isHost
+                        ? 'rounded-tl-none bg-indigo-600 text-white ring-indigo-500'
+                        : 'rounded-tr-none bg-white text-slate-700 ring-slate-200'
+                      }`}>
+                      {line.text}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );
