@@ -6,6 +6,12 @@ type UploadedFile = {
   id: string;
   name: string;
   size: number;
+  file: File;
+};
+
+type PodcastLine = {
+  speaker: string;
+  text: string;
 };
 
 const formatBytes = (bytes: number) => {
@@ -22,12 +28,16 @@ const formatBytes = (bytes: number) => {
 export default function Home() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedScript, setGeneratedScript] = useState<PodcastLine[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const addFiles = (incomingFiles: FileList | File[]) => {
     const nextFiles = Array.from(incomingFiles).map((file) => ({
       id: `${file.name}-${file.size}-${file.lastModified}`,
       name: file.name,
       size: file.size,
+      file,
     }));
 
     setFiles((currentFiles) => {
@@ -35,6 +45,39 @@ export default function Home() {
       const uniqueNewFiles = nextFiles.filter((file) => !seen.has(file.id));
       return [...currentFiles, ...uniqueNewFiles];
     });
+  };
+
+  const handleGenerate = async () => {
+    if (files.length === 0 || isGenerating) return;
+
+    setIsGenerating(true);
+    setGeneratedScript([]);
+    setErrorMessage(null);
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append('files', file.file);
+      });
+
+      const response = await fetch('/api/generate-podcast', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo generar el podcast.');
+      }
+
+      const data = (await response.json()) as PodcastLine[];
+      setGeneratedScript(data);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Error inesperado generando el guion.',
+      );
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const totalSize = useMemo(
@@ -110,10 +153,31 @@ export default function Home() {
 
         <button
           type="button"
-          className="mt-8 w-full rounded-xl bg-indigo-600 px-4 py-3 text-base font-semibold text-white transition hover:bg-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          onClick={handleGenerate}
+          disabled={isGenerating || files.length === 0}
+          className="mt-8 w-full rounded-xl bg-indigo-600 px-4 py-3 text-base font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
         >
-          Generar Podcast
+          {isGenerating ? 'Generando...' : 'Generar Podcast'}
         </button>
+
+        {errorMessage ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errorMessage}
+          </p>
+        ) : null}
+
+        {generatedScript.length > 0 ? (
+          <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-base font-semibold">Guion generado</h3>
+            <ul className="mt-3 space-y-3">
+              {generatedScript.map((line, index) => (
+                <li key={`${line.speaker}-${index}`} className="text-sm">
+                  <span className="font-semibold">{line.speaker}:</span> {line.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
     </main>
   );
